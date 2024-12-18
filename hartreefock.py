@@ -179,7 +179,7 @@ def construct_F(H, P, TEI, nb):
         for j in range(nb):
             for k in range(nb):
                 for l in range(nb):
-                    #adding contributions from repuolsion
+                    #adding contributions from repulsion
                     F[i, j] += P[k, l] * (2 * TEI[i, j, k, l] - TEI[i, k, j, l])
     return F
 
@@ -199,12 +199,21 @@ def construct_P(C, nb, charge):
     P_new = np.zeros((nb, nb))
     for i in range(nb):
         for j in range(nb):
-            for a in range(int((nb - charge) / 2)): #sum over occ orbitals
+            electrons = sum(z) - charge
+            occ_orbitals = electrons // 2  # For closed-shell systems
+            for a in range(occ_orbitals):
                 P_new[i, j] += 2 * C[i, a] * C[j, a]
     return P_new
+    
 
 def electronic_E(P, H, F):
-    return 0.5 * np.sum(P * (H + F))
+    E_elec = 0
+    print("P*H:", np.sum(P * H))
+    print("P*F:", np.sum(P * F))
+    for i in range(nb):
+        for j in range(nb):
+                E_elec += P[i, j] * (H[i,j] + F[i,j])
+    return E_elec
 
 def scf(T, V, S, TEI, nb, charge, max_iter=100, convergence_threshold=1e-6):
     '''
@@ -243,30 +252,62 @@ def scf(T, V, S, TEI, nb, charge, max_iter=100, convergence_threshold=1e-6):
 
     return E_elec, P
 
-def total_energy(E_elec, V, P):
-    return E_elec + np.sum(V * P) / 2
+def nuclear_repulsion_energy(z, coords):
+    e_repulsion = 0.0
+    for i in range(len(z)):
+        for j in range(i + 1, len(z)):
+            r_ij = np.linalg.norm(coords[i] - coords[j])
+            e_repulsion += z[i] * z[j] / r_ij
+    return e_repulsion
+
+def energy_decomposition(P, T, V, TEI, z, coords, nb):
+    ET = np.sum(P * T)
+    EV = np.sum(P * V)
+    EJ = 0.0
+    for i in range(nb):
+        for j in range(nb):
+            for k in range(nb):
+                for l in range(nb):
+                    EJ += P[i, j] * P[k, l] * TEI[i, j, k, l]
+    EJ = EJ/2
+    EK = 0.0
+    for i in range(nb):
+        for j in range(nb):
+            for k in range(nb):
+                for l in range(nb):
+                    EK -= P[i, j] * P[k, l] * TEI[i, k, j, l]
+    EK = EK/2
+
+    ENuc = nuclear_repulsion_energy(z, coords)
+
+    ETot = ET + EV + EJ + EK + ENuc
+    return ET, EV, EJ, EK, ENuc, ETot
+    
+
+#####################################################
 
 natoms, charge, labels, z, coords = ReadInput('/home/danb/hartree_fock/h2.input')
 #natoms, charge, labels, z, coords = ReadInput('heh+.input')
 nb, basis = BuildBasis(natoms,z,coords)
 S, T, V = cmpt1e(natoms,nb,z,coords,basis)
-print("Overlap integrals")
-print(S)
-print("Kinetic Energy integrals")
-print(T)
-print("Nuclear-Electronic Energy integrals")
-print(V)
 TEI = cmpt2e(nb,coords,basis)
-# print("Two-electron Integrals")
-# print(TEI)
 
-# Wriet HF code below here
+#print("Overlap integrals")
+#print(S)
+#print("Kinetic Energy integrals")
+#print(T)
+#print("Nuclear-Electronic Energy integrals")
+#print(V)
+#print("Two-electron Integrals")
+#print(TEI)
+
  
 # Main execution
 H = H_core(T, V)
-#So = S_orthogonalized(S)
 E_elec, P = scf(T, V, S, TEI, nb, charge)
-E_total = total_energy(E_elec, V, P)
+ET, EV, EJ, EK, ENuc, ETot = energy_decomposition(P, T, V, TEI, z, coords, nb)
 
-print("Electronic Energy:", E_elec)
-print("Total Energy:", E_total)
+print("###########")
+print("E_elec:", E_elec, "\n-----------")
+print("ET:", ET, "\nEV:", EV, "\nEJ:", EJ, "\nEK:", EK, "\nENuc:", ENuc, "\n>>> E(RHF):", ETot," <<<")
+print(E_elec + ENuc)
