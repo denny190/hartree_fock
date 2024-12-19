@@ -170,7 +170,7 @@ def init_P(nb):
     '''
     return np.zeros((nb, nb))
 
-def construct_F(H, P, TEI, nb):
+def _construct_F(H, P, TEI, nb):
     '''
     Using the TEI, H_core and P we construct the F matrix
     '''
@@ -181,6 +181,18 @@ def construct_F(H, P, TEI, nb):
                 for l in range(nb):
                     #adding contributions from repulsion
                     F[i, j] += P[k, l] * (2 * TEI[i, j, k, l] - TEI[i, k, j, l])
+    return F
+
+def construct_F(H, P, TEI, nb):
+    F = np.copy(H)
+    for i in range(nb):
+        for j in range(nb):
+            for k in range(nb):
+                for l in range(nb):
+                    #coulomb term
+                    F[i, j] += P[k, l] * TEI[i, j, k, l]
+                    #exchange term
+                    F[i, j] -= 0.5 * P[k, l] * TEI[i, k, j, l]
     return F
 
 def diag_F(F, S_half_inv):
@@ -208,12 +220,12 @@ def construct_P(C, nb, charge):
 
 def electronic_E(P, H, F):
     E_elec = 0
-    print("P*H:", np.sum(P * H))
-    print("P*F:", np.sum(P * F))
+    #print("P*H:", np.sum(P * H))
+    #print("P*F:", np.sum(P * F))
     for i in range(nb):
         for j in range(nb):
                 E_elec += P[i, j] * (H[i,j] + F[i,j])
-    return E_elec
+    return 0.5 * E_elec
 
 def scf(T, V, S, TEI, nb, charge, max_iter=100, convergence_threshold=1e-6):
     '''
@@ -263,19 +275,16 @@ def nuclear_repulsion_energy(z, coords):
 def energy_decomposition(P, T, V, TEI, z, coords, nb):
     ET = np.sum(P * T)
     EV = np.sum(P * V)
+
     EJ = 0.0
-    for i in range(nb):
-        for j in range(nb):
-            for k in range(nb):
-                for l in range(nb):
-                    EJ += P[i, j] * P[k, l] * TEI[i, j, k, l]
-    EJ = EJ/2
     EK = 0.0
     for i in range(nb):
         for j in range(nb):
             for k in range(nb):
                 for l in range(nb):
-                    EK -= P[i, j] * P[k, l] * TEI[i, k, j, l]
+                    EJ += P[i, j] * P[k, l] * TEI[i, j, k, l]
+                    EK -= 0.5 * P[i, j] * P[k, l] * TEI[i, k, j, l]
+    EJ = EJ/2
     EK = EK/2
 
     ENuc = nuclear_repulsion_energy(z, coords)
@@ -309,5 +318,4 @@ ET, EV, EJ, EK, ENuc, ETot = energy_decomposition(P, T, V, TEI, z, coords, nb)
 
 print("###########")
 print("E_elec:", E_elec, "\n-----------")
-print("ET:", ET, "\nEV:", EV, "\nEJ:", EJ, "\nEK:", EK, "\nENuc:", ENuc, "\n>>> E(RHF):", ETot," <<<")
-print(E_elec + ENuc)
+print("ET:", ET, "\nEV:", EV, "\nEJ:", EJ, "\nEK:", EK, "\nENuc:", ENuc, "\nE_Elec + ENuc:", E_elec + ENuc,"\n>>> E(RHF):", ETot," <<<")
