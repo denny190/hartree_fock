@@ -295,8 +295,8 @@ def energy_decomposition(P, T, V, TEI, z, coords, nb):
 
 #####################################################
 
-natoms, charge, labels, z, coords = ReadInput('/home/danb/hartree_fock/h2.input')
-#natoms, charge, labels, z, coords = ReadInput('heh+.input')
+#natoms, charge, labels, z, coords = ReadInput('h2.input')
+natoms, charge, labels, z, coords = ReadInput('heh+.input')
 nb, basis = BuildBasis(natoms,z,coords)
 S, T, V = cmpt1e(natoms,nb,z,coords,basis)
 TEI = cmpt2e(nb,coords,basis)
