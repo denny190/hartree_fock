@@ -158,7 +158,6 @@ def H_core(T, V):
 def S_orthogonalized(S):
     '''
     Orthogonalization of the overlap matrix.
-    Why tho?
     '''
     from scipy.linalg import fractional_matrix_power
     return fractional_matrix_power(S, -0.5)
@@ -184,15 +183,16 @@ def _construct_F(H, P, TEI, nb):
     return F
 
 def construct_F(H, P, TEI, nb):
+    '''
+    Using the TEI, H_core and P we construct the F matrix. v2
+    '''
     F = np.copy(H)
     for i in range(nb):
         for j in range(nb):
             for k in range(nb):
                 for l in range(nb):
-                    #coulomb term
-                    F[i, j] += P[k, l] * TEI[i, j, k, l]
-                    #exchange term
-                    F[i, j] -= 0.5 * P[k, l] * TEI[i, k, j, l]
+                    F[i, j] += P[k, l] * TEI[i, j, k, l] #coulomb term
+                    F[i, j] -= 0.5 * P[k, l] * TEI[i, k, j, l] #exchange term
     return F
 
 def diag_F(F, S_half_inv):
@@ -219,6 +219,9 @@ def construct_P(C, nb, charge):
     
 
 def electronic_E(P, H, F):
+    '''
+    Electronic energy calculated wth the core Hamiltonian and the iteratively updated F and P matrices.
+    '''
     E_elec = 0
     #print("P*H:", np.sum(P * H))
     #print("P*F:", np.sum(P * F))
@@ -227,7 +230,7 @@ def electronic_E(P, H, F):
                 E_elec += P[i, j] * (H[i,j] + F[i,j])
     return 0.5 * E_elec
 
-def scf(T, V, S, TEI, nb, charge, max_iter=100, convergence_threshold=1e-6):
+def scf(T, V, S, TEI, nb, charge, max_iterations=100, convergence_threshold=1e-6):
     '''
     SCF procedure
     First H_core, S_orthogonalized and initial P matrix are initialized. 
@@ -243,9 +246,9 @@ def scf(T, V, S, TEI, nb, charge, max_iter=100, convergence_threshold=1e-6):
     H = H_core(T, V)
     So = S_orthogonalized(S)
     P = init_P(nb)
-    E_old = 0
+    E_old = 0 #For storing the energy from previous iteration to check convergence
 
-    for iteration in range(max_iter):
+    for iteration in range(max_iterations):
         F = construct_F(H, P, TEI, nb)
         C, eigvals = diag_F(F, So)
         P_new = construct_P(C, nb, charge)
@@ -265,6 +268,9 @@ def scf(T, V, S, TEI, nb, charge, max_iter=100, convergence_threshold=1e-6):
     return E_elec, P
 
 def nuclear_repulsion_energy(z, coords):
+    '''
+    Nuclear repulsion energy term, surprisingly
+    '''
     e_repulsion = 0.0
     for i in range(len(z)):
         for j in range(i + 1, len(z)):
@@ -273,11 +279,16 @@ def nuclear_repulsion_energy(z, coords):
     return e_repulsion
 
 def energy_decomposition(P, T, V, TEI, z, coords, nb):
-    ET = np.sum(P * T)
-    EV = np.sum(P * V)
+    '''
+    Using the density matrix from the SCF to recalculate various expectation values.
+    E_elec from the cycle is not used here. Instead the final density matrix is applied to obtain the 1e and 2e energies again. 
+    This redundancy was left in the code on purpose, as an 'error check'.
+    '''
+    ET = np.sum(P * T) #1e kinetic energy
+    EV = np.sum(P * V) #1e - nuclear attraction
 
-    EJ = 0.0
-    EK = 0.0
+    EJ = 0.0 #2e repulsion
+    EK = 0.0 #2e exchange
     for i in range(nb):
         for j in range(nb):
             for k in range(nb):
@@ -295,27 +306,19 @@ def energy_decomposition(P, T, V, TEI, z, coords, nb):
 
 #####################################################
 
-#natoms, charge, labels, z, coords = ReadInput('h2.input')
-natoms, charge, labels, z, coords = ReadInput('heh+.input')
+# Reading input
+natoms, charge, labels, z, coords = ReadInput('h2.input')
+#natoms, charge, labels, z, coords = ReadInput('heh+.input')
+
+# Building basis and computing 1 and 2 electron integrals
 nb, basis = BuildBasis(natoms,z,coords)
 S, T, V = cmpt1e(natoms,nb,z,coords,basis)
 TEI = cmpt2e(nb,coords,basis)
-
-#print("Overlap integrals")
-#print(S)
-#print("Kinetic Energy integrals")
-#print(T)
-#print("Nuclear-Electronic Energy integrals")
-#print(V)
-#print("Two-electron Integrals")
-#print(TEI)
-
  
 # Main execution
-H = H_core(T, V)
 E_elec, P = scf(T, V, S, TEI, nb, charge)
 ET, EV, EJ, EK, ENuc, ETot = energy_decomposition(P, T, V, TEI, z, coords, nb)
 
 print("###########")
 print("E_elec:", E_elec, "\n-----------")
-print("ET:", ET, "\nEV:", EV, "\nEJ:", EJ, "\nEK:", EK, "\nENuc:", ENuc, "\nE_Elec + ENuc:", E_elec + ENuc,"\n>>> E(RHF):", ETot," <<<")
+print("ET:", ET, "\nEV:", EV, "\nEJ:", EJ, "\nEK:", EK, "\nENuc:", ENuc, "\nE_Elec + ENuc:", E_elec + ENuc, "\n>>> E(RHF):", ETot," <<<")
