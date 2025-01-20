@@ -64,100 +64,150 @@ def BoysFunc(r):
       b = 0.5 * np.sqrt(np.pi/r) * math.erf(np.sqrt(r))
    return b 
 
-def cmpt1e(nat, nb, z, coords, basis):
-    S = np.zeros((nb, nb))
-    T = np.zeros((nb, nb))
-    V = np.zeros((nb, nb))
+def compute_one_electron_integrals(num_atoms, num_basis, atomic_numbers, coordinates, basis_set):
+    """
+    Compute one-electron integrals: overlap (S), kinetic energy (T), and nuclear attraction (V).
+    """
+    overlap_matrix = np.zeros((num_basis, num_basis))
+    kinetic_energy_matrix = np.zeros((num_basis, num_basis))
+    nuclear_attraction_matrix = np.zeros((num_basis, num_basis))
 
-    for nao1 in range(nb):
-        for nao2 in range(nb):
-            for prim1 in range(basis[nao1][2]):
-                zetb = basis[nao1][3][prim1]
-                dijb = basis[nao1][4][prim1]
-                Ab = coords[basis[nao1][1], :]
-                for prim2 in range(basis[nao2][2]):
-                    zetk = basis[nao2][3][prim2]
-                    dijk = basis[nao2][4][prim2]
-                    Ak = coords[basis[nao2][1], :]
-                    p = zetb + zetk
-                    q = zetb * zetk / p
-                    Abk = (zetb * Ab + zetk * Ak) / p
-                    RAB = Ak - Ab
-                    RAB2 = np.power(np.linalg.norm(RAB), 2)
-                    s00 = dijb * dijk * np.power(np.pi / p, 3 / 2) * np.exp(-q * RAB2)
-                    S[nao1, nao2] += s00
+    for basis_fn1 in range(num_basis):
+        atom1_idx = basis_set[basis_fn1][1]
+        atom1_coords = coordinates[atom1_idx, :]
 
-                    k00 = q * (3.0 - 2.0 * q * RAB2)
-                    T[nao1, nao2] += k00 * s00
+        for basis_fn2 in range(num_basis):
+            atom2_idx = basis_set[basis_fn2][1]
+            atom2_coords = coordinates[atom2_idx, :]
 
-                    vtmp = 0.0
-                    for nuc in range(nat):
-                        RPC2 = np.power(np.linalg.norm(coords[nuc, :] - Abk), 2)
-                        bfunc = BoysFunc(p * RPC2)
-                        vtmp += bfunc * z[nuc]
-                    V[nao1, nao2] -= 2.0 * vtmp * np.sqrt(p / np.pi) * s00
-    return S, T, V
+            for prim1_idx in range(basis_set[basis_fn1][2]):
+                zeta1 = basis_set[basis_fn1][3][prim1_idx]
+                coeff1 = basis_set[basis_fn1][4][prim1_idx]
+
+                for prim2_idx in range(basis_set[basis_fn2][2]):
+                    zeta2 = basis_set[basis_fn2][3][prim2_idx]
+                    coeff2 = basis_set[basis_fn2][4][prim2_idx]
+
+                    p = zeta1 + zeta2
+                    q = zeta1 * zeta2 / p
+                    gaussian_center = (zeta1 * atom1_coords + zeta2 * atom2_coords) / p
+
+                    distance_squared = np.linalg.norm(atom2_coords - atom1_coords) ** 2
+                    gaussian_overlap = (
+                        coeff1
+                        * coeff2
+                        * (np.pi / p) ** (3 / 2)
+                        * np.exp(-q * distance_squared)
+                    )
+
+                    overlap_matrix[basis_fn1, basis_fn2] += gaussian_overlap
+
+                    kinetic_contribution = q * (3.0 - 2.0 * q * distance_squared)
+                    kinetic_energy_matrix[basis_fn1, basis_fn2] += kinetic_contribution * gaussian_overlap
+
+                    attraction_term = 0.0
+                    for nucleus_idx in range(num_atoms):
+                        nucleus_coords = coordinates[nucleus_idx, :]
+                        nucleus_distance_squared = np.linalg.norm(
+                            nucleus_coords - gaussian_center
+                        ) ** 2
+                        boys_factor = BoysFunc(p * nucleus_distance_squared)
+                        attraction_term += boys_factor * atomic_numbers[nucleus_idx]
+
+                    nuclear_attraction_matrix[basis_fn1, basis_fn2] -= (
+                        2.0 * attraction_term * np.sqrt(p / np.pi) * gaussian_overlap
+                    )
+
+    return overlap_matrix, kinetic_energy_matrix, nuclear_attraction_matrix
 
 
-def cmpt2e(nb, coords, basis):
-    TEI = np.zeros((nb, nb, nb, nb))
-    kfac = np.sqrt(2.0) * np.power(np.pi, 1.25)
+def compute_two_electron_integrals(num_basis, coordinates, basis_set):
+    """
+    Compute two-electron integrals using the given basis set and coordinates.
+    """
+    two_electron_integrals = np.zeros((num_basis, num_basis, num_basis, num_basis))
+    normalization_factor = np.sqrt(2.0) * (np.pi ** 1.25)
 
-    for i in range(nb):
-        orbi = basis[i]
-        Ai = coords[orbi[1], :]
-        for j in range(i + 1):
-            orbj = basis[j]
-            Aj = coords[orbj[1], :]
-            rij2 = np.power(np.linalg.norm(Aj - Ai), 2)
-            ij = i * (i + 1) / 2 + j
-            for k in range(nb):
-                orbk = basis[k]
-                Ak = coords[orbk[1], :]
-                for l in range(k + 1):
-                    kl = k * (k + 1) / 2 + l
-                    if ij < kl:
+    for basis_fn1 in range(num_basis):
+        atom1_idx = basis_set[basis_fn1][1]
+        atom1_coords = coordinates[atom1_idx, :]
+
+        for basis_fn2 in range(basis_fn1 + 1):
+            atom2_idx = basis_set[basis_fn2][1]
+            atom2_coords = coordinates[atom2_idx, :]
+            distance12_squared = np.linalg.norm(atom2_coords - atom1_coords) ** 2
+
+            for basis_fn3 in range(num_basis):
+                atom3_idx = basis_set[basis_fn3][1]
+                atom3_coords = coordinates[atom3_idx, :]
+
+                for basis_fn4 in range(basis_fn3 + 1):
+                    atom4_idx = basis_set[basis_fn4][1]
+                    atom4_coords = coordinates[atom4_idx, :]
+                    distance34_squared = np.linalg.norm(atom4_coords - atom3_coords) ** 2
+
+                    if basis_fn1 * (basis_fn1 + 1) // 2 + basis_fn2 < basis_fn3 * (basis_fn3 + 1) // 2 + basis_fn4:
                         continue
-                    orbl = basis[l]
-                    Al = coords[orbl[1], :]
-                    rkl2 = np.power(np.linalg.norm(Al - Ak), 2)
-                    intval = 0.0
 
-                    for ii in range(orbi[2]):
-                        zeti = orbi[3][ii]
-                        diji = orbi[4][ii]
-                        for jj in range(orbj[2]):
-                            zetj = orbj[3][jj]
-                            dijj = orbj[4][jj]
-                            pb = zeti + zetj
-                            qb = zeti * zetj / pb
-                            pXb = (Ai * zeti + Aj * zetj) / pb
-                            kij = kfac * np.exp(-qb * rij2) / pb
-                            for kk in range(orbk[2]):
-                                zetk = orbk[3][kk]
-                                dijk = orbk[4][kk]
-                                for ll in range(orbl[2]):
-                                    zetl = orbl[3][ll]
-                                    dijl = orbl[4][ll]
-                                    pk = zetk + zetl
-                                    qk = zetk * zetl / pk
-                                    pXk = (Ak * zetk + Al * zetl) / pk
-                                    kkl = kfac * np.exp(-qk * rkl2) / pk
-                                    rpp2 = np.power(np.linalg.norm(pXk - pXb), 2)
-                                    rho = pb * pk / (pb + pk)
-                                    bfunc = BoysFunc(rpp2 * rho)
-                                    fac = bfunc * kij * kkl / np.sqrt(pb + pk)
-                                    intval += fac * diji * dijj * dijk * dijl
+                    integral_value = 0.0
+                    for prim1_idx in range(basis_set[basis_fn1][2]):
+                        zeta1 = basis_set[basis_fn1][3][prim1_idx]
+                        coeff1 = basis_set[basis_fn1][4][prim1_idx]
 
-                    TEI[i, j, k, l] = intval
-                    TEI[j, i, k, l] = TEI[i, j, k, l]
-                    TEI[i, j, l, k] = TEI[i, j, k, l]
-                    TEI[j, i, l, k] = TEI[i, j, k, l]
-                    TEI[k, l, i, j] = TEI[i, j, k, l]
-                    TEI[k, l, j, i] = TEI[i, j, k, l]
-                    TEI[l, k, i, j] = TEI[i, j, k, l]
-                    TEI[l, k, j, i] = TEI[i, j, k, l]
-    return TEI
+                        for prim2_idx in range(basis_set[basis_fn2][2]):
+                            zeta2 = basis_set[basis_fn2][3][prim2_idx]
+                            coeff2 = basis_set[basis_fn2][4][prim2_idx]
+
+                            p = zeta1 + zeta2
+                            q = zeta1 * zeta2 / p
+                            gaussian_center1 = (zeta1 * atom1_coords + zeta2 * atom2_coords) / p
+                            factor12 = normalization_factor * np.exp(-q * distance12_squared) / p
+
+                            for prim3_idx in range(basis_set[basis_fn3][2]):
+                                zeta3 = basis_set[basis_fn3][3][prim3_idx]
+                                coeff3 = basis_set[basis_fn3][4][prim3_idx]
+
+                                for prim4_idx in range(basis_set[basis_fn4][2]):
+                                    zeta4 = basis_set[basis_fn4][3][prim4_idx]
+                                    coeff4 = basis_set[basis_fn4][4][prim4_idx]
+
+                                    pk = zeta3 + zeta4
+                                    qk = zeta3 * zeta4 / pk
+                                    gaussian_center2 = (
+                                        (zeta3 * atom3_coords + zeta4 * atom4_coords) / pk
+                                    )
+                                    factor34 = normalization_factor * np.exp(-qk * distance34_squared) / pk
+
+                                    inter_center_distance_squared = np.linalg.norm(
+                                        gaussian_center2 - gaussian_center1
+                                    ) ** 2
+                                    rho = p * pk / (p + pk)
+                                    boys_factor = BoysFunc(rho * inter_center_distance_squared)
+
+                                    integral_contribution = (
+                                        boys_factor
+                                        * factor12
+                                        * factor34
+                                        / np.sqrt(p + pk)
+                                        * coeff1
+                                        * coeff2
+                                        * coeff3
+                                        * coeff4
+                                    )
+                                    integral_value += integral_contribution
+
+                    # Symmetry considerations
+                    two_electron_integrals[basis_fn1, basis_fn2, basis_fn3, basis_fn4] = integral_value
+                    two_electron_integrals[basis_fn2, basis_fn1, basis_fn3, basis_fn4] = integral_value
+                    two_electron_integrals[basis_fn1, basis_fn2, basis_fn4, basis_fn3] = integral_value
+                    two_electron_integrals[basis_fn2, basis_fn1, basis_fn4, basis_fn3] = integral_value
+                    two_electron_integrals[basis_fn3, basis_fn4, basis_fn1, basis_fn2] = integral_value
+                    two_electron_integrals[basis_fn4, basis_fn3, basis_fn1, basis_fn2] = integral_value
+                    two_electron_integrals[basis_fn3, basis_fn4, basis_fn2, basis_fn1] = integral_value
+                    two_electron_integrals[basis_fn4, basis_fn3, basis_fn2, basis_fn1] = integral_value
+
+    return two_electron_integrals
+
 
 
 def H_core(T, V):
@@ -320,8 +370,8 @@ natoms, charge, labels, z, coords = ReadInput('h2.input')
 
 # Building basis and computing 1 and 2 electron integrals
 nb, basis = BuildBasis(natoms,z,coords)
-S, T, V = cmpt1e(natoms,nb,z,coords,basis)
-TEI = cmpt2e(nb,coords,basis)
+S, T, V = compute_one_electron_integrals(natoms,nb,z,coords,basis)
+TEI = compute_two_electron_integrals(nb,coords,basis)
  
 # Main execution
 E_elec, P = scf(T, V, S, TEI, nb, charge)
