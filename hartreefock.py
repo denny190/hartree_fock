@@ -1,6 +1,8 @@
 import numpy as np
 import scipy as sp
+import os, sys
 import math
+import json
 
 def ReadInput(input_file):
     input=open(input_file,"r")
@@ -31,30 +33,60 @@ def ReadInput(input_file):
             i=i+1
     return natoms,charge,labels,z,coords
 
-def BuildBasis(nat,z,coords):
-    bfno = 0
-    basis = []
-    for i in range(nat):
-        if z[i] == 1:
-            zets = [18.7311370,2.8253937,0.6401217]
-            dijs = [0.2149354183,0.3645711272,0.4150514277]
-            basis.append([bfno,i,3,zets,dijs])
-            bfno += 1
-            zets = [0.1612778000]
-            dijs = [0.1813806839]
-            basis.append([bfno,i,1,zets,dijs])
-            bfno += 1
+def BuildBasis(natoms, atomic_numbers, coordinates, basis_set_name, basis_directory="basis/"):
+    """
+    Build basis from basis sets in JSON files located the basis dir.
+    Basis sets sourced from the Basis Set Exchange.
 
-        if z[i] == 2:
-            zets = [38.421634000,5.7780300000,1.2417740000]
-            dijs = [0.4414855700,0.6938965807,0.6649918170]
-            basis.append([bfno,i,3,zets,dijs])
-            bfno += 1
-            zets = [0.2979640000]
-            dijs = [0.2874305587]
-            basis.append([bfno,i,1,zets,dijs])
-            bfno += 1
-    return bfno,basis
+    Args:
+        natoms (int): Number of atoms.
+        atomic_numbers (list): List of atomic numbers for each atom.
+        coordinates (np.ndarray): Atomic coordinates.
+        basis_directory (str): Directory containing JSON files for basis sets.
+
+    Returns:
+        int: Number of basis functions.
+        list: Basis set information.
+    """
+    bfno = 0
+    basis_set = []
+
+    basis_file = os.path.join(basis_directory, f"{basis_set_name}.json")
+    if not os.path.exists(basis_file):
+        raise FileNotFoundError(f"Basis set file not found: {basis_file}")
+
+    with open(basis_file, "r") as file:
+        basis_data = json.load(file)
+
+    # Iteration over atoms loaded in input
+    # basis set JSON's contain all info about atom constants that we need, so no need to maintain a separate periodic table
+    for atom_idx, atomic_number in enumerate(atomic_numbers):
+        if str(atomic_number) not in basis_data["elements"]:
+            raise ValueError(f"Basis set not defined for atomic number {atomic_number}")
+
+        element_basis = basis_data["elements"][str(atomic_number)]
+
+        # Parse electron shells for the current atom
+        for shell in element_basis["electron_shells"]:
+            angular_momentum = shell["angular_momentum"]
+            exponents = [float(e) for e in shell["exponents"]]
+            coefficients = [[float(c) for c in coeff_set] for coeff_set in shell["coefficients"]]
+
+            # Add basis functions
+            for ang_mom_idx, ang_mom in enumerate(angular_momentum):
+                basis_set.append(
+                    [
+                        bfno,  # Basis function index
+                        atom_idx,  # Atom index
+                        len(exponents),  # Number of primitives
+                        exponents,  # Primitive exponents
+                        coefficients[ang_mom_idx],  # Primitive coefficients
+                        ang_mom,  # Angular momentum (e.g., s, p, d, ...)
+                    ]
+                )
+                bfno += 1
+
+    return bfno, basis_set
 
 def BoysFunc(r):
    xsmall = 1.e-6
@@ -367,9 +399,10 @@ def energy_decomposition(P, T, V, TEI, z, coords, nb):
 # Reading input
 natoms, charge, labels, z, coords = ReadInput('h2.input')
 #natoms, charge, labels, z, coords = ReadInput('heh+.input')
+basis_set = "cc-pvqz"
 
 # Building basis and computing 1 and 2 electron integrals
-nb, basis = BuildBasis(natoms,z,coords)
+nb, basis = BuildBasis(natoms, z, coords, basis_set, basis_directory="basis/")
 S, T, V = compute_one_electron_integrals(natoms,nb,z,coords,basis)
 TEI = compute_two_electron_integrals(nb,coords,basis)
  
