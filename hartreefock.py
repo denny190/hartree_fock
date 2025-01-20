@@ -259,19 +259,6 @@ def init_P(nb):
     '''
     return np.zeros((nb, nb))
 
-def _construct_F(H, P, TEI, nb):
-    '''
-    Using the TEI, H_core and P we construct the F matrix
-    '''
-    F = np.copy(H)
-    for i in range(nb):
-        for j in range(nb):
-            for k in range(nb):
-                for l in range(nb):
-                    #adding contributions from repulsion
-                    F[i, j] += P[k, l] * (2 * TEI[i, j, k, l] - TEI[i, k, j, l])
-    return F
-
 def construct_F(H, P, TEI, nb):
     '''
     Using the TEI, H_core and P we construct the F matrix. v2
