@@ -64,93 +64,101 @@ def BoysFunc(r):
       b = 0.5 * np.sqrt(np.pi/r) * math.erf(np.sqrt(r))
    return b 
 
-def cmpt1e(nat,nb,z,coords,basis):
-   S = np.zeros((nb,nb))
-   T = np.zeros((nb,nb))
-   V = np.zeros((nb,nb))
-   for nao1 in range(nb):
-      for nao2 in range(nb):
-         for prim1 in range(basis[nao1][2]):
-            zetb=basis[nao1][3][prim1]
-            dijb=basis[nao1][4][prim1]
-            Ab=coords[basis[nao1][1],:]
-            for prim2 in range(basis[nao2][2]):
-               zetk=basis[nao2][3][prim2]
-               dijk=basis[nao2][4][prim2]
-               Ak=coords[basis[nao2][1],:]
-               p=zetb+zetk
-               q=zetb*zetk/p
-               Abk = (zetb * Ab + zetk * Ak) / p
-               RAB=Ak - Ab
-               RAB2=np.power(np.linalg.norm(RAB),2)
-               s00=dijb*dijk*np.power(np.pi/p,3/2)*np.exp(-q*RAB2)
-               S[nao1,nao2]+=s00
-               k00 = q*(3.-2.*q*RAB2)
-               T[nao1,nao2]+=k00*s00
-               vtmp = 0.
-               for nuc in range(nat):
-                  RPC2 = np.power(np.linalg.norm(coords[nuc,:]-Abk),2)
-                  bfunc = BoysFunc(p * RPC2)
-                  vtmp += bfunc * z[nuc]
-               V[nao1,nao2] -= 2. * vtmp * np.sqrt(p/np.pi) * s00
-   return S, T, V
+def cmpt1e(nat, nb, z, coords, basis):
+    S = np.zeros((nb, nb))
+    T = np.zeros((nb, nb))
+    V = np.zeros((nb, nb))
 
-def cmpt2e(nb,coords,basis):
-   TEI = np.zeros((nb,nb,nb,nb))
-   kfac = np.sqrt(2.) * np.power(np.pi,1.25)
-   for i in range(nb):
-      orbi=basis[i]
-      Ai=coords[orbi[1],:]
-      for j in range(i+1):
-          orbj=basis[j]
-          Aj=coords[orbj[1],:]
-          rij2=np.power(np.linalg.norm(Aj-Ai),2)
-          ij = i*(i+1)/2 + j
-          for k in range(nb):
-              orbk=basis[k]
-              Ak=coords[orbk[1],:]
-              for l in range(k+1):
-                  kl = k*(k+1)/2 + l
-                  if (ij < kl):
-                     continue
-                  orbl=basis[l]
-                  Al=coords[orbl[1],:]
-                  rkl2=np.power(np.linalg.norm(Al-Ak),2)
-                  intval  = 0.
-                  for ii in range(orbi[2]):
-                     zeti=orbi[3][ii]
-                     diji=orbi[4][ii]
-                     for jj in range(orbj[2]):
-                         zetj=orbj[3][jj]
-                         dijj=orbj[4][jj]
-                         pb = zeti + zetj
-                         qb = zeti * zetj / pb
-                         pXb = (Ai * zeti + Aj * zetj) / pb
-                         kij = kfac * np.exp(-qb * rij2) / pb
-                         for kk in range(orbk[2]):
-                             zetk=orbk[3][kk]
-                             dijk=orbk[4][kk]
-                             for ll in range(orbl[2]):
-                                zetl=orbl[3][ll]
-                                dijl=orbl[4][ll]
-                                pk = zetk + zetl
-                                qk = zetk * zetl / pk
-                                pXk = (Ak * zetk + Al * zetl) / pk
-                                kkl = kfac * np.exp(-qk * rkl2) / pk
-                                rpp2=np.power(np.linalg.norm(pXk-pXb),2)
-                                rho = pb * pk / (pb + pk)
-                                bfunc = BoysFunc(rpp2 * rho)
-                                fac = bfunc * kij * kkl / np.sqrt(pb + pk)
-                                intval += fac * diji * dijj * dijk * dijl
-                  TEI[i,j,k,l] = intval
-                  TEI[j,i,k,l]=TEI[i,j,k,l]
-                  TEI[i,j,l,k]=TEI[i,j,k,l]
-                  TEI[j,i,l,k]=TEI[i,j,k,l]
-                  TEI[k,l,i,j]=TEI[i,j,k,l]
-                  TEI[k,l,j,i]=TEI[i,j,k,l]
-                  TEI[l,k,i,j]=TEI[i,j,k,l]
-                  TEI[l,k,j,i]=TEI[i,j,k,l]
-   return TEI
+    for nao1 in range(nb):
+        for nao2 in range(nb):
+            for prim1 in range(basis[nao1][2]):
+                zetb = basis[nao1][3][prim1]
+                dijb = basis[nao1][4][prim1]
+                Ab = coords[basis[nao1][1], :]
+                for prim2 in range(basis[nao2][2]):
+                    zetk = basis[nao2][3][prim2]
+                    dijk = basis[nao2][4][prim2]
+                    Ak = coords[basis[nao2][1], :]
+                    p = zetb + zetk
+                    q = zetb * zetk / p
+                    Abk = (zetb * Ab + zetk * Ak) / p
+                    RAB = Ak - Ab
+                    RAB2 = np.power(np.linalg.norm(RAB), 2)
+                    s00 = dijb * dijk * np.power(np.pi / p, 3 / 2) * np.exp(-q * RAB2)
+                    S[nao1, nao2] += s00
+
+                    k00 = q * (3.0 - 2.0 * q * RAB2)
+                    T[nao1, nao2] += k00 * s00
+
+                    vtmp = 0.0
+                    for nuc in range(nat):
+                        RPC2 = np.power(np.linalg.norm(coords[nuc, :] - Abk), 2)
+                        bfunc = BoysFunc(p * RPC2)
+                        vtmp += bfunc * z[nuc]
+                    V[nao1, nao2] -= 2.0 * vtmp * np.sqrt(p / np.pi) * s00
+    return S, T, V
+
+
+def cmpt2e(nb, coords, basis):
+    TEI = np.zeros((nb, nb, nb, nb))
+    kfac = np.sqrt(2.0) * np.power(np.pi, 1.25)
+
+    for i in range(nb):
+        orbi = basis[i]
+        Ai = coords[orbi[1], :]
+        for j in range(i + 1):
+            orbj = basis[j]
+            Aj = coords[orbj[1], :]
+            rij2 = np.power(np.linalg.norm(Aj - Ai), 2)
+            ij = i * (i + 1) / 2 + j
+            for k in range(nb):
+                orbk = basis[k]
+                Ak = coords[orbk[1], :]
+                for l in range(k + 1):
+                    kl = k * (k + 1) / 2 + l
+                    if ij < kl:
+                        continue
+                    orbl = basis[l]
+                    Al = coords[orbl[1], :]
+                    rkl2 = np.power(np.linalg.norm(Al - Ak), 2)
+                    intval = 0.0
+
+                    for ii in range(orbi[2]):
+                        zeti = orbi[3][ii]
+                        diji = orbi[4][ii]
+                        for jj in range(orbj[2]):
+                            zetj = orbj[3][jj]
+                            dijj = orbj[4][jj]
+                            pb = zeti + zetj
+                            qb = zeti * zetj / pb
+                            pXb = (Ai * zeti + Aj * zetj) / pb
+                            kij = kfac * np.exp(-qb * rij2) / pb
+                            for kk in range(orbk[2]):
+                                zetk = orbk[3][kk]
+                                dijk = orbk[4][kk]
+                                for ll in range(orbl[2]):
+                                    zetl = orbl[3][ll]
+                                    dijl = orbl[4][ll]
+                                    pk = zetk + zetl
+                                    qk = zetk * zetl / pk
+                                    pXk = (Ak * zetk + Al * zetl) / pk
+                                    kkl = kfac * np.exp(-qk * rkl2) / pk
+                                    rpp2 = np.power(np.linalg.norm(pXk - pXb), 2)
+                                    rho = pb * pk / (pb + pk)
+                                    bfunc = BoysFunc(rpp2 * rho)
+                                    fac = bfunc * kij * kkl / np.sqrt(pb + pk)
+                                    intval += fac * diji * dijj * dijk * dijl
+
+                    TEI[i, j, k, l] = intval
+                    TEI[j, i, k, l] = TEI[i, j, k, l]
+                    TEI[i, j, l, k] = TEI[i, j, k, l]
+                    TEI[j, i, l, k] = TEI[i, j, k, l]
+                    TEI[k, l, i, j] = TEI[i, j, k, l]
+                    TEI[k, l, j, i] = TEI[i, j, k, l]
+                    TEI[l, k, i, j] = TEI[i, j, k, l]
+                    TEI[l, k, j, i] = TEI[i, j, k, l]
+    return TEI
+
 
 def H_core(T, V):
     return T + V
