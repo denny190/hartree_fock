@@ -397,7 +397,7 @@ def energy_decomposition(P, T, V, TEI, z, coords, nb):
 #####################################################
 
 # Reading input
-natoms, charge, labels, z, coords = ReadInput('h2.input')
+natoms, charge, labels, z, coords = ReadInput('inputs/h2.input')
 #natoms, charge, labels, z, coords = ReadInput('heh+.input')
 basis_set = "cc-pvqz"
 
